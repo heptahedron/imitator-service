@@ -9,6 +9,8 @@ pub struct SqliteDbClient {
 
 #[derive(Error, Debug)]
 pub enum SqliteDbClientError {
+    #[error("Unknown user: {0}")]
+    UnknownUser(String),
     #[error("Sql error")]
     SqlxError(#[from] sqlx::Error),
     #[error("Other: {0}")]
@@ -139,7 +141,14 @@ impl SqliteDbClient {
             sqlx::query_scalar::<_, u32>("SELECT user_id FROM user_names WHERE user_name = ?")
                 .bind(user_name)
                 .fetch_one(&self.pool)
-                .await?;
+                .await
+                .map_err(|err| match err {
+                    sqlx::Error::RowNotFound => {
+                        SqliteDbClientError::UnknownUser(user_name.to_owned())
+                    }
+                    other => other.into(),
+                })?;
+
         let mut current_word = "".to_owned();
         let mut sentence: Vec<String> = vec![];
 
