@@ -1,4 +1,5 @@
 use sqlx::Executor;
+use thiserror::Error;
 
 #[derive(Clone)]
 pub struct SqliteDbClient {
@@ -6,16 +7,12 @@ pub struct SqliteDbClient {
     words_regex: regex::Regex,
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum SqliteDbClientError {
-    SqlxError(sqlx::Error),
+    #[error("Sql error")]
+    SqlxError(#[from] sqlx::Error),
+    #[error("Other: {0}")]
     Other(String),
-}
-
-impl From<sqlx::Error> for SqliteDbClientError {
-    fn from(value: sqlx::Error) -> Self {
-        SqliteDbClientError::SqlxError(value)
-    }
 }
 
 pub type SqliteDbClientResult<T> = Result<T, SqliteDbClientError>;
@@ -72,7 +69,10 @@ impl SqliteDbClient {
         &'s self,
         message: &'message str,
     ) -> impl Iterator<Item = &'message str> + 'message {
-        self.words_regex.find_iter(message).map(move |m| m.as_str())
+        self.words_regex
+            .find_iter(message)
+            .map(move |m| m.as_str())
+            .filter(|s| !s.is_empty())
     }
 
     pub async fn add_message(&self, user_name: &str, message: &str) -> SqliteDbClientResult<()> {

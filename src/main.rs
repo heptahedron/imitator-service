@@ -1,15 +1,49 @@
+mod csv_ingest;
 mod db_client;
 
+use std::path::PathBuf;
+
+use structopt::StructOpt;
 use warp::hyper::body::Bytes;
 use warp::Filter;
 
-use db_client::SqliteDbClient;
+use crate::csv_ingest::ingest_csv;
+use crate::db_client::SqliteDbClient;
 
-#[tokio::main]
-async fn main() {
-    let client = SqliteDbClient::new("sqlite://messages.db?mode=rwc")
+#[derive(Debug, StructOpt)]
+pub struct ImitatorOptions {
+    #[structopt(
+        short = "d",
+        long = "db",
+        default_value = "sqlite://messages.db?mode=rwc"
+    )]
+    db: String,
+    #[structopt(subcommand)]
+    subcommand: Option<ImitatorSubcommands>,
+}
+
+#[derive(Debug, StructOpt)]
+pub enum ImitatorSubcommands {
+    IngestCsv {
+        #[structopt(parse(from_os_str))]
+        input: PathBuf,
+    },
+}
+
+async fn real_main() -> Result<(), Box<dyn std::error::Error>> {
+    let ImitatorOptions { db, subcommand } = ImitatorOptions::from_args();
+
+    let client = SqliteDbClient::new(&db)
         .await
         .expect("Failed to create db client");
+
+    match subcommand {
+        Some(ImitatorSubcommands::IngestCsv { input }) => {
+            ingest_csv(client, input).await?;
+            return Ok(());
+        }
+        None => (),
+    };
 
     let client2 = client.clone();
     let add_message = warp::path!("users" / String / "messages")
@@ -69,4 +103,11 @@ async fn main() {
         .parse()
         .expect("Invalid socket address format");
     warp::serve(all).run(socket_addr).await;
+
+    Ok(())
+}
+
+#[tokio::main]
+pub async fn main() {
+    real_main().await.expect("");
 }
