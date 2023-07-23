@@ -1,7 +1,7 @@
 mod db_client;
 
-use warp::Filter;
 use warp::hyper::body::Bytes;
+use warp::Filter;
 
 use db_client::SqliteDbClient;
 
@@ -49,7 +49,18 @@ async fn main() {
     let imitate = warp::path!("users" / String / "imitation")
         .and(warp::get())
         .and(warp::any().map(move || client3.clone()))
-        .then(|user_id, client| async move { format!("Imitation of user {} requested", user_id) });
+        .then(|user_name: String, client: SqliteDbClient| async move {
+            match client.imitate_user(&user_name).await {
+                Ok(sentence) => warp::reply::with_status(sentence, warp::http::StatusCode::OK),
+                Err(err) => {
+                    println!("Failed to imitate user: {:?}", err);
+                    warp::reply::with_status(
+                        "Error".to_owned(),
+                        warp::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    )
+                }
+            }
+        });
 
     let all = add_message.or(imitate);
 

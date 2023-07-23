@@ -603,6 +603,7 @@ name = "imitator-service"
 version = "0.1.0"
 dependencies = [
  "md5",
+ "rand",
  "serde",
  "serde_json",
  "sqlx",
