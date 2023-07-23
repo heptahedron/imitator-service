@@ -3,6 +3,7 @@ use sqlx::Executor;
 #[derive(Clone)]
 pub struct SqliteDbClient {
     pool: sqlx::SqlitePool,
+    words_regex: regex::Regex,
 }
 
 #[derive(Debug)]
@@ -22,7 +23,10 @@ pub type SqliteDbClientResult<T> = Result<T, SqliteDbClientError>;
 impl SqliteDbClient {
     pub async fn new(url: &str) -> SqliteDbClientResult<Self> {
         let pool = sqlx::SqlitePool::connect(url).await?;
-        let client = SqliteDbClient { pool };
+        let Ok(words_regex) = regex::Regex::new(r"(\w+|[^\s]+)") else {
+            return Err(SqliteDbClientError::Other("Failed to construct regex".to_owned()))
+        };
+        let client = SqliteDbClient { pool, words_regex };
 
         client.init_tables().await?;
 
@@ -64,6 +68,13 @@ impl SqliteDbClient {
         Ok(())
     }
 
+    pub fn get_message_words<'message, 's: 'message>(
+        &'s self,
+        message: &'message str,
+    ) -> impl Iterator<Item = &'message str> + 'message {
+        self.words_regex.find_iter(message).map(move |m| m.as_str())
+    }
+
     pub async fn add_message(&self, user_name: &str, message: &str) -> SqliteDbClientResult<()> {
         sqlx::query(
             "INSERT OR IGNORE INTO user_names (user_name, user_id) \
@@ -94,7 +105,7 @@ impl SqliteDbClient {
         if inserted_row_count.rows_affected() > 0 {
             let word_pairs = [""]
                 .into_iter()
-                .chain(message.split_ascii_whitespace())
+                .chain(self.get_message_words(message))
                 .chain([""].into_iter())
                 .collect::<Vec<_>>()
                 .windows(2)
@@ -106,7 +117,7 @@ impl SqliteDbClient {
                 .collect::<Vec<_>>();
 
             for (word_1, word_2) in word_pairs {
-                let result = sqlx::query(
+                sqlx::query(
                     "INSERT INTO sequential_words (user_id, word_1, word_2, count) \
                     VALUES (?, ?, ?, 1) \
                     ON CONFLICT (user_id, word_1, word_2) \
@@ -133,7 +144,6 @@ impl SqliteDbClient {
         let mut sentence: Vec<String> = vec![];
 
         for _ in 0..100 {
-            println!("Current word is {}", current_word);
             let next_words = sqlx::query_as::<_, (String, u32)>(
                 "SELECT word_2, count FROM sequential_words \
                 WHERE user_id = ? AND word_1 = ? \
@@ -146,10 +156,7 @@ impl SqliteDbClient {
             let total_weight: u32 = next_words.iter().map(|(_, count)| *count).sum();
             let mut chosen_index: u32 = rand::random::<u32>() % total_weight;
 
-            println!("Total weight is {}", total_weight);
             for (next_word, count) in next_words {
-                println!("Chosen index is {}", chosen_index);
-                println!("Next word is {} with count {}", next_word, count);
                 if chosen_index < count {
                     current_word = next_word;
                     break;
@@ -158,7 +165,6 @@ impl SqliteDbClient {
                 }
             }
 
-            println!("New current word is {}", current_word);
             if current_word.len() == 0 {
                 break;
             }
