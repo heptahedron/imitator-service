@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 use warp::hyper::body::Bytes;
 use warp::Filter;
 
-use crate::db_client::SqliteDbClient;
+use crate::db_client::{SqliteDbClient, SqliteDbClientError};
 
 pub fn make_server(
     client: SqliteDbClient,
@@ -65,10 +65,16 @@ pub fn make_server(
                 Ok(sentence) => warp::reply::with_status(sentence, warp::http::StatusCode::OK),
                 Err(err) => {
                     println!("Failed to imitate user: {:?}", err);
-                    warp::reply::with_status(
-                        "Error".to_owned(),
-                        warp::http::StatusCode::INTERNAL_SERVER_ERROR,
-                    )
+                    match err {
+                        SqliteDbClientError::UnknownUser(_) => warp::reply::with_status(
+                            format!("Unknown user: {}", user_name),
+                            warp::http::StatusCode::NOT_FOUND,
+                        ),
+                        _ => warp::reply::with_status(
+                            "Internal error".to_owned(),
+                            warp::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        )
+                    }
                 }
             }
         });
