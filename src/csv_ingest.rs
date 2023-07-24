@@ -10,6 +10,8 @@ pub async fn ingest_csv(client: SqliteDbClient, input_path: PathBuf) -> Result<(
         .has_headers(false)
         .create_reader(File::open(input_path).await?);
     let mut records: csv_async::StringRecordsStream<'_, File> = reader.records();
+    let mut n_processed: u64 = 0;
+    let mut last_checkpoint: u64 = 0;
 
     while let Some(record) = records.next().await {
         let record: csv_async::StringRecord = record?;
@@ -17,6 +19,11 @@ pub async fn ingest_csv(client: SqliteDbClient, input_path: PathBuf) -> Result<(
             return Err(Box::<dyn Error>::from("Rows need at least 2 cells"))
         };
         client.add_message(user_name, message).await?;
+        n_processed += 1;
+        if n_processed - last_checkpoint >= 100 {
+            last_checkpoint = n_processed - (n_processed % 100);
+            println!("Processed {} messages", last_checkpoint);
+        }
     }
 
     Ok(())

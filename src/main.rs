@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use structopt::StructOpt;
+use tokio_stream::StreamExt;
 
 use crate::csv_ingest::ingest_csv;
 use crate::db_client::SqliteDbClient;
@@ -31,6 +32,7 @@ pub enum ImitatorSubcommands {
     Imitate {
         user_name: String,
     },
+    ListUsers,
     IngestCsv {
         #[structopt(parse(from_os_str))]
         input: PathBuf,
@@ -50,6 +52,13 @@ async fn real_main() -> Result<(), Box<dyn std::error::Error>> {
         Serve { host } => serve(client, host).await,
         Imitate { user_name } => {
             println!("{}", client.imitate_user(&user_name).await?);
+        }
+        ListUsers => {
+            let mut stream = Box::pin(client.list_users());
+
+            while let Some((user_name, user_id)) = stream.next().await {
+                println!("{}\t{}", user_name, user_id);
+            }
         }
         IngestCsv { input } => ingest_csv(client, input).await?,
     };

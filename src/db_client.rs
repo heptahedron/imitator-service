@@ -1,3 +1,5 @@
+use async_stream::stream;
+use futures_core::Stream;
 use sqlx::Executor;
 use thiserror::Error;
 
@@ -182,5 +184,38 @@ impl SqliteDbClient {
         }
 
         Ok(sentence.join(" "))
+    }
+
+    pub fn list_users<'stream, 's: 'stream>(
+        &'s self,
+    ) -> impl Stream<Item = (String, u32)> + 'stream {
+        stream! {
+            let mut last_offset: u32 = 0;
+            loop {
+                let result = sqlx::query_as::<_, (String, u32)>(
+                    "SELECT user_name, user_id FROM user_names \
+                    ORDER BY user_name LIMIT 16 OFFSET ?"
+                )
+                    .bind(last_offset)
+                    .fetch_all(&self.pool)
+                    .await;
+
+                match result {
+                    Ok(users) => {
+                        let n_read = users.len() as u32;
+                        for name_id_pair in users {
+                            yield name_id_pair
+                        }
+
+                        if n_read < 16 {
+                            break
+                        }
+
+                        last_offset += n_read;
+                    },
+                    _ => break
+                }
+            }
+        }
     }
 }
