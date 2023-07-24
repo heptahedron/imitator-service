@@ -15,11 +15,18 @@ pub fn make_server(
         .and(warp::any().map(move || client2.clone()))
         .then(
             |user_name: String, request_body: Bytes, client: SqliteDbClient| async move {
+                let Ok(user_name): Result<String, _> = urlencoding::decode(&user_name).map(Into::into) else {
+                    return warp::reply::with_status(
+                        "Invalid utf8 in username",
+                        warp::http::StatusCode::BAD_REQUEST,
+                    )
+                };
+
                 let message = match std::str::from_utf8(&request_body) {
                     Ok(message) => message,
                     Err(_) => {
                         return warp::reply::with_status(
-                            "Invalid utf8",
+                            "Invalid utf8 in message",
                             warp::http::StatusCode::BAD_REQUEST,
                         )
                     }
@@ -47,6 +54,13 @@ pub fn make_server(
         .and(warp::get())
         .and(warp::any().map(move || client3.clone()))
         .then(|user_name: String, client: SqliteDbClient| async move {
+            let Ok(user_name): Result<String, _> = urlencoding::decode(&user_name).map(Into::into) else {
+                return warp::reply::with_status(
+                    "Invalid utf8 in username".to_owned(),
+                    warp::http::StatusCode::BAD_REQUEST,
+                )
+            };
+
             match client.imitate_user(&user_name).await {
                 Ok(sentence) => warp::reply::with_status(sentence, warp::http::StatusCode::OK),
                 Err(err) => {
