@@ -1,9 +1,16 @@
 use std::net::SocketAddr;
 
+use serde::{Deserialize, Serialize};
 use warp::hyper::body::Bytes;
 use warp::Filter;
 
 use crate::db_client::{SqliteDbClient, SqliteDbClientError};
+
+#[derive(Serialize, Deserialize)]
+pub struct ImitateRandomUserResponse {
+    user_name: String,
+    imitation: String,
+}
 
 pub fn make_server(
     client: SqliteDbClient,
@@ -79,7 +86,63 @@ pub fn make_server(
             }
         });
 
-    warp::serve(add_message.or(imitate))
+    let client4 = client.clone();
+    let imitate_random_user = warp::path!("random-user" / "imitation")
+        .and(warp::get())
+        .and(warp::any().map(move || client4.clone()))
+        .then(|client: SqliteDbClient| async move {
+            // girl this shit is s ofucked
+            let user_name = match client.get_random_user().await {
+                Ok(user_name) => user_name,
+                Err(err) => {
+                    println!("Error getting random username: {}", err);
+                    return warp::reply::with_status(
+                        "Internal error".to_owned(),
+                        warp::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    );
+                }
+            };
+
+            let imitation = match client.imitate_user(&user_name).await {
+                Ok(imitation) => imitation,
+                Err(err) => {
+                    println!(
+                        "Failed to imitate user that was \
+                        literally just randomly selected: {:?}",
+                        err
+                    );
+
+                    // If we can't resolve the username we just randomly
+                    // selected FROM the database, that's either a problem or
+                    // it's just a result of the last get_random_user call and
+                    // the imitation call not being in the same transaction,
+                    //
+                    // a thing about which I do not care presently.
+                    return warp::reply::with_status(
+                        "Internal error".to_owned(),
+                        warp::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    );
+                }
+            };
+
+            let serialized = match serde_json::to_string(&ImitateRandomUserResponse {
+                user_name,
+                imitation,
+            }) {
+                Ok(serialized) => serialized,
+                Err(err) => {
+                    println!("Serialization failed: {}", err);
+                    return warp::reply::with_status(
+                        "Internal error".to_owned(),
+                        warp::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    );
+                }
+            };
+
+            warp::reply::with_status(serialized, warp::http::StatusCode::OK)
+        });
+
+    warp::serve(add_message.or(imitate).or(imitate_random_user))
 }
 
 pub async fn serve(client: SqliteDbClient, host: SocketAddr) -> () {

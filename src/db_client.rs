@@ -218,4 +218,16 @@ impl SqliteDbClient {
             }
         }
     }
+
+    pub async fn get_random_user(&self) -> SqliteDbClientResult<String> {
+        let user_name = sqlx::query_scalar::<_, String>(
+            "SELECT user_name from user_names \
+            ORDER BY random() LIMIT 1",
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(SqliteDbClientError::SqlxError)?;
+
+        Ok(user_name)
+    }
 }

@@ -32,6 +32,7 @@ pub enum ImitatorSubcommands {
     Imitate {
         user_name: String,
     },
+    ImitateRandomUser,
     ListUsers,
     IngestCsv {
         #[structopt(parse(from_os_str))]
@@ -52,6 +53,10 @@ async fn real_main() -> Result<(), Box<dyn std::error::Error>> {
         Serve { host } => serve(client, host).await,
         Imitate { user_name } => {
             println!("{}", client.imitate_user(&user_name).await?);
+        }
+        ImitateRandomUser => {
+            let user_name = &client.get_random_user().await?;
+            println!("{}: {}", user_name, client.imitate_user(&user_name).await?);
         }
         ListUsers => {
             let mut stream = Box::pin(client.list_users());
