@@ -11,7 +11,7 @@ docker build -t imitator-service .
 # 
 # This is ideal for development if you want to be able to easily inspect
 # the contents of the database using tools on the hose
-docker run --rm -p 8000:8000 \
+docker run --rm -it -p 8000:8000 \
     --mount type=bind,src=./messages.db,dst=/app-storage/messages.db \
     imitator-service
 ```

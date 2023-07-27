@@ -40,4 +40,4 @@ VOLUME ["/app-storage"]
 USER $APP_USER
 WORKDIR ${APP_DIR}
 
-CMD ["./imitator-service", "--db=/app-storage/messages.db", "serve", "0.0.0.0:8000"]
+CMD ./imitator-service --db=/app-storage/messages.db serve 0.0.0.0:8000
