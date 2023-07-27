@@ -31,9 +31,13 @@ RUN groupadd $APP_USER \
 
 COPY --from=builder /imitator-service/target/release/imitator-service ${APP_DIR}/imitator-service
 
-RUN chown -R $APP_USER:$APP_USER ${APP_DIR}
+RUN mkdir /app-storage
+
+RUN chown -R $APP_USER:$APP_USER ${APP_DIR} /app-storage
+
+VOLUME ["/app-storage"]
 
 USER $APP_USER
 WORKDIR ${APP_DIR}
 
-CMD ["./imitator-service", "serve", "0.0.0.0:8000"]
+CMD ["./imitator-service", "--db=/app-storage/messages.db", "serve", "0.0.0.0:8000"]
